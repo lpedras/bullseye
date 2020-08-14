@@ -73,7 +73,7 @@ namespace Bullseye.Internal
 
         public Task Starting(string target)
         {
-            var targetView = view.Record(target, TargetState.Starting, null);
+            var targetView = view.Update(target, TargetState.Starting, null);
             return this.writer.WriteLineAsync(Message(p.Default, "Starting...", targetView));
         }
 
@@ -82,25 +82,25 @@ namespace Bullseye.Internal
 
         public Task Failed(string target, Exception ex, TimeSpan? duration)
         {
-            var targetView = view.Record(target, TargetState.Failed, duration);
+            var targetView = view.Update(target, TargetState.Failed, duration);
             return this.writer.WriteLineAsync(Message(p.Failed, $"Failed! {ex.Message}", targetView));
         }
 
         public Task Failed(string target)
         {
-            var targetView = view.Record(target, TargetState.Failed, null);
+            var targetView = view.Update(target, TargetState.Failed, null);
             return this.writer.WriteLineAsync(Message(p.Failed, $"Failed!", targetView));
         }
 
         public Task Succeeded(string target, TimeSpan? duration = null)
         {
-            var targetView = view.Record(target, TargetState.Succeeded, duration);
+            var targetView = view.Update(target, TargetState.Succeeded, duration);
             return this.writer.WriteLineAsync(Message(p.Succeeded, "Succeeded.", targetView));
         }
 
         public Task Starting<TInput>(string target, TInput input, Guid inputId)
         {
-            var (targetView, inputView) = view.Record(target, InputState.Starting, null, input, inputId);
+            var (targetView, inputView) = view.Update(target, State.Starting, null, input, inputId);
             return this.writer.WriteLineAsync(Message(p.Default, "Starting...", targetView, inputView));
         }
 
@@ -109,19 +109,19 @@ namespace Bullseye.Internal
 
         public Task Failed<TInput>(string target, TInput input, Exception ex, TimeSpan? duration, Guid inputId)
         {
-            var (targetView, inputView) = view.Record(target, InputState.Failed, duration, input, inputId);
+            var (targetView, inputView) = view.Update(target, State.Failed, duration, input, inputId);
             return this.writer.WriteLineAsync(Message(p.Failed, $"Failed! {ex.Message}", targetView, inputView));
         }
 
         public Task Succeeded<TInput>(string target, TInput input, TimeSpan? duration, Guid inputId)
         {
-            var (targetView, inputView) = view.Record(target, InputState.Succeeded, duration, input, inputId);
+            var (targetView, inputView) = view.Update(target, State.Succeeded, duration, input, inputId);
             return this.writer.WriteLineAsync(Message(p.Succeeded, "Succeeded.", targetView, inputView));
         }
 
         public Task NoInputs(string target)
         {
-            var targetView = view.Record(target, TargetState.NoInputs, null);
+            var targetView = view.Update(target, TargetState.NoInputs, null);
             return this.writer.WriteLineAsync(Message(p.Warning, "No inputs!", targetView));
         }
 

@@ -7,7 +7,7 @@ namespace Bullseye.Internal
     using System.Linq;
     using System.Text;
     using System.Threading;
-    using static System.Math;
+    //using static System.Math;
 
     public partial class Logger
     {
@@ -17,7 +17,7 @@ namespace Bullseye.Internal
 
             private int targetCount;
 
-            public TargetState State { get; private set; }
+            public State State { get; private set; }
 
             public TimeSpan? Duration { get; private set; }
 
@@ -25,6 +25,17 @@ namespace Bullseye.Internal
                 this.targets.Values.OrderBy(target => target.Ordinal);
 
             public string ToString(string prefix, Palette p)
+            {
+                var builder = new StringBuilder();
+
+                this.AppendTargets(builder, prefix, p);
+
+
+
+                return builder.ToString();
+            }
+
+            private void AppendTargets(StringBuilder builder, string prefix, Palette p)
             {
                 // whitespace (e.g. can change to '·' for debugging)
                 var ws = ' ';
@@ -58,7 +69,7 @@ namespace Bullseye.Internal
                     {
                         var input = $"{ws}{ws}{p.Input}{inputView.Input}{p.Reset}";
 
-                        var inputState = inputView.State == InputState.Failed ? $"{p.Failed}Failed!{p.Reset}" : $"{p.Succeeded}Succeeded{p.Reset}";
+                        var inputState = inputView.State == Logger.State.Failed ? $"{p.Failed}Failed!{p.Reset}" : $"{p.Succeeded}Succeeded{p.Reset}";
 
                         var inputDuration = inputView.Duration.HasValue
                             ? $"{(index < inputs.Count - 1 ? p.TreeFork : p.TreeCorner)}{p.Timing}{inputView.Duration.Humanize(true)}{p.Reset}"
@@ -87,12 +98,10 @@ namespace Bullseye.Internal
                 var perW = rows.Max(row => Palette.StripColours(row.Percentage).Length);
 
                 // timing column width (duration and percentage)
-                var timW = Max(Palette.StripColours(rows[0].Duration).Length, durW + 2 + perW);
+                var timW = Math.Max(Palette.StripColours(rows[0].Duration).Length, durW + 2 + perW);
 
                 // expand percentage column width to ensure time and percentage are as wide as duration
-                perW = Max(timW - durW - 2, perW);
-
-                var builder = new StringBuilder();
+                perW = Math.Max(timW - durW - 2, perW);
 
                 // summary start separator
                 builder.AppendLine($"{prefix}{p.Default}{"".Prp(tarW + 2 + outW + 2 + timW, p.Dash)}{p.Reset}");
@@ -111,25 +120,44 @@ namespace Bullseye.Internal
 
                 // summary end separator
                 builder.AppendLine($"{prefix}{p.Default}{"".Prp(tarW + 2 + outW + 2 + timW, p.Dash)}{p.Reset}");
-
-                return builder.ToString();
             }
 
-            public TargetView Record(string target, TargetState state, TimeSpan? duration) =>
-                this.Record(state, duration).Record(target).Record(state, duration);
-
-            public (TargetView, InputView) Record(string target, InputState state, TimeSpan? duration, object input, Guid inputId) =>
-                this.Record((TargetState)state, duration).Record(target).Record(state, duration, input, inputId);
-
-            private View Record(TargetState state, TimeSpan? duration)
+            public TargetView Update(string target, TargetState state, TimeSpan? duration)
             {
-                this.State = Coalesce(this.State, state);
+                this.State = state;
                 this.Duration = this.Duration.Add(duration);
-                return this;
+
+                var targetView = this.targets.AddOrUpdate(
+                    target,
+                    new TargetView(target, Interlocked.Increment(ref this.targetCount), state, duration),
+                    (_, view) =>
+                    {
+                        view.Update(state, duration);
+                        return view;
+                    });
+
+                return targetView;
             }
 
-            private TargetView Record(string target) =>
-                this.targets.GetOrAdd(target, _ => new TargetView(target, Interlocked.Increment(ref this.targetCount)));
+            public (TargetView, InputView) Update(string target, State state, TimeSpan? duration, object input, Guid inputId)
+            {
+                this.Duration = this.Duration.Add(duration);
+
+                TargetView targetView;
+                InputView inputView;
+
+                this.targets.AddOrUpdate(
+                    target,
+                    ((targetView, inputView) = TargetView.Create(target, Interlocked.Increment(ref this.targetCount), state, duration, input, inputId)).targetView,
+                    (_, view) =>
+                    {
+                        targetView = view;
+                        inputView = view.Update(state, duration, input, inputId);
+                        return view;
+                    });
+
+                return (targetView, inputView);
+            }
 
             private class SummaryRow
             {
@@ -143,22 +171,25 @@ namespace Bullseye.Internal
             }
         }
 
-        private static TargetState Coalesce(TargetState x, TargetState y) =>
-            (TargetState)Max((int)x, (int)y);
-
-        private static InputState Coalesce(InputState x, InputState y) =>
-            (InputState)Max((int)x, (int)y);
-
         private class TargetView
         {
             private readonly ConcurrentDictionary<Guid, InputView> inputs = new ConcurrentDictionary<Guid, InputView>();
 
             private int inputCount;
 
-            public TargetView(string name, int ordinal)
+            public TargetView(string name, int ordinal, TargetState state, TimeSpan? duration)
             {
                 this.Name = name;
                 this.Ordinal = ordinal;
+                this.State = state;
+                this.Duration = duration;
+            }
+
+            public static (TargetView, InputView) Create(string name, int ordinal, State state, TimeSpan? duration, object input, Guid inputId)
+            {
+                var targetView = new TargetView(name, ordinal, (TargetState)state, duration);
+                var inputView = targetView.inputs.GetOrAdd(inputId, new InputView(Interlocked.Increment(ref targetView.inputCount), state, duration, input));
+                return (targetView, inputView);
             }
 
             public string Name { get; }
@@ -172,55 +203,64 @@ namespace Bullseye.Internal
             public IEnumerable<InputView> Inputs =>
                 this.inputs.Values.OrderBy(input => input.Ordinal);
 
-            public TargetView Record(TargetState state, TimeSpan? duration)
+            public void Update(TargetState state, TimeSpan? duration)
             {
                 this.State = Coalesce(this.State, state);
                 this.Duration = this.Duration.Add(duration);
-                return this;
             }
 
-            public (TargetView, InputView) Record(InputState state, TimeSpan? duration, object input, Guid inputId) =>
-                (this, this.Record((TargetState)state, duration).Record(inputId).Record(state, duration, input));
+            public InputView Update(State state, TimeSpan? duration, object input, Guid inputId)
+            {
+                this.State = Coalesce(this.State, state);
+                this.Duration = this.Duration.Add(duration);
 
-            private InputView Record(Guid inputId) =>
-                this.inputs.GetOrAdd(inputId, _ => new InputView(Interlocked.Increment(ref this.inputCount)));
+                var inputView = this.inputs.AddOrUpdate(
+                    inputId,
+                    new InputView(Interlocked.Increment(ref this.inputCount), state, duration, input),
+                    (_, view) =>
+                    {
+                        view.State = state;
+                        view.Duration = duration;
+                        view.Input = input;
+                        return view;
+                    });
+
+                return inputView;
+            }
         }
 
         private class InputView
         {
-            public InputView(int ordinal) =>
+            public InputView(int ordinal, State state, TimeSpan? duration, object input)
+            {
                 this.Ordinal = ordinal;
+                this.State = state;
+                this.Duration = duration;
+                this.Input = input;
+            }
 
             public int Ordinal { get; }
 
-            public InputState State { get; private set; }
+            public State State { get; set; }
 
-            public TimeSpan? Duration { get; private set; }
+            public TimeSpan? Duration { get; set; }
 
-            public object Input { get; private set; }
-
-            public InputView Record(InputState state, TimeSpan? duration, object input)
-            {
-                this.State = Coalesce(this.State, state);
-                this.Duration = this.Duration.Add(duration);
-                this.Input = input;
-                return this;
-            }
+            public object Input { get; set; }
         }
 
         private enum TargetState
         {
-            Starting = 0,
-            NoInputs = 1,
-            Succeeded = 2,
-            Failed = 3,
+            NoInputs,
+            Starting,
+            Succeeded,
+            Failed,
         }
 
-        private enum InputState
+        private enum State
         {
-            Starting = 0,
-            Succeeded = 2,
-            Failed = 3,
+            Starting,
+            Succeeded,
+            Failed,
         }
     }
 }
