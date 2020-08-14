@@ -7,7 +7,6 @@ namespace Bullseye.Internal
     using System.Linq;
     using System.Text;
     using System.Threading;
-    //using static System.Math;
 
     public partial class Logger
     {
@@ -16,8 +15,6 @@ namespace Bullseye.Internal
             private readonly ConcurrentDictionary<string, TargetView> targets = new ConcurrentDictionary<string, TargetView>();
 
             private int targetCount;
-
-            public State State { get; private set; }
 
             public TimeSpan? Duration { get; private set; }
 
@@ -33,6 +30,42 @@ namespace Bullseye.Internal
 
 
                 return builder.ToString();
+            }
+
+            public TargetView Update(string target, TargetState state, TimeSpan? duration)
+            {
+                this.Duration = this.Duration.Add(duration);
+
+                var targetView = this.targets.AddOrUpdate(
+                    target,
+                    new TargetView(target, Interlocked.Increment(ref this.targetCount), state, duration),
+                    (_, view) =>
+                    {
+                        view.Update(state, duration);
+                        return view;
+                    });
+
+                return targetView;
+            }
+
+            public (TargetView, InputView) Update(string target, State state, TimeSpan? duration, object input, Guid inputId)
+            {
+                this.Duration = this.Duration.Add(duration);
+
+                TargetView targetView;
+                InputView inputView;
+
+                this.targets.AddOrUpdate(
+                    target,
+                    ((targetView, inputView) = TargetView.Create(target, Interlocked.Increment(ref this.targetCount), state, duration, input, inputId)).targetView,
+                    (_, view) =>
+                    {
+                        targetView = view;
+                        inputView = view.Update(state, duration, input, inputId);
+                        return view;
+                    });
+
+                return (targetView, inputView);
             }
 
             private void AppendTargets(StringBuilder builder, string prefix, Palette p)
@@ -122,43 +155,6 @@ namespace Bullseye.Internal
                 builder.AppendLine($"{prefix}{p.Default}{"".Prp(tarW + 2 + outW + 2 + timW, p.Dash)}{p.Reset}");
             }
 
-            public TargetView Update(string target, TargetState state, TimeSpan? duration)
-            {
-                this.State = state;
-                this.Duration = this.Duration.Add(duration);
-
-                var targetView = this.targets.AddOrUpdate(
-                    target,
-                    new TargetView(target, Interlocked.Increment(ref this.targetCount), state, duration),
-                    (_, view) =>
-                    {
-                        view.Update(state, duration);
-                        return view;
-                    });
-
-                return targetView;
-            }
-
-            public (TargetView, InputView) Update(string target, State state, TimeSpan? duration, object input, Guid inputId)
-            {
-                this.Duration = this.Duration.Add(duration);
-
-                TargetView targetView;
-                InputView inputView;
-
-                this.targets.AddOrUpdate(
-                    target,
-                    ((targetView, inputView) = TargetView.Create(target, Interlocked.Increment(ref this.targetCount), state, duration, input, inputId)).targetView,
-                    (_, view) =>
-                    {
-                        targetView = view;
-                        inputView = view.Update(state, duration, input, inputId);
-                        return view;
-                    });
-
-                return (targetView, inputView);
-            }
-
             private class SummaryRow
             {
                 public string TargetOrInput { get; set; }
@@ -205,13 +201,12 @@ namespace Bullseye.Internal
 
             public void Update(TargetState state, TimeSpan? duration)
             {
-                this.State = Coalesce(this.State, state);
+                this.State = state;
                 this.Duration = this.Duration.Add(duration);
             }
 
             public InputView Update(State state, TimeSpan? duration, object input, Guid inputId)
             {
-                this.State = Coalesce(this.State, state);
                 this.Duration = this.Duration.Add(duration);
 
                 var inputView = this.inputs.AddOrUpdate(

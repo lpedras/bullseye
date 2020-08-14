@@ -68,7 +68,7 @@ namespace Bullseye.Internal
         public async Task Succeeded(List<string> targets)
         {
             await this.writer.WriteAsync(view.ToString(GetPrefix(), p)).Tax();
-            await this.writer.WriteLineAsync(Message(p.Succeeded, $"Succeeded.", targets)).Tax();
+            await this.writer.WriteLineAsync(Message(p.Succeeded, $"Succeeded", targets)).Tax();
         }
 
         public Task Starting(string target)
@@ -95,7 +95,7 @@ namespace Bullseye.Internal
         public Task Succeeded(string target, TimeSpan? duration = null)
         {
             var targetView = view.Update(target, TargetState.Succeeded, duration);
-            return this.writer.WriteLineAsync(Message(p.Succeeded, "Succeeded.", targetView));
+            return this.writer.WriteLineAsync(Message(p.Succeeded, "Succeeded", targetView));
         }
 
         public Task Starting<TInput>(string target, TInput input, Guid inputId)
@@ -116,7 +116,7 @@ namespace Bullseye.Internal
         public Task Succeeded<TInput>(string target, TInput input, TimeSpan? duration, Guid inputId)
         {
             var (targetView, inputView) = view.Update(target, State.Succeeded, duration, input, inputId);
-            return this.writer.WriteLineAsync(Message(p.Succeeded, "Succeeded.", targetView, inputView));
+            return this.writer.WriteLineAsync(Message(p.Succeeded, "Succeeded", targetView, inputView));
         }
 
         public Task NoInputs(string target)
