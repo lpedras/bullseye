@@ -6,11 +6,10 @@ end_of_line                                                               = crlf
 indent_size                                                               = 2
 indent_style                                                              = space
 insert_final_newline                                                      = true
-max_line_length                                                           = 120
 trim_trailing_whitespace                                                  = true
 
 [*.cs]
-indent_size = 4
+indent_size                                                               = 4
 csharp_indent_case_contents                                               = true
 csharp_indent_labels                                                      = flush_left
 csharp_indent_switch_labels                                               = true
@@ -86,7 +85,7 @@ dotnet_diagnostic.RS0026.severity = none
 
 [*.sh]
 end_of_line                                                               = lf
-max_line_length                                                           = 9999
 
-[*.cmd]
-max_line_length                                                           = 9999
+[*.sln]
+indent_size                                                               = 1
+indent_style                                                              = tab
